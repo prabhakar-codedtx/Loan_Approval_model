@@ -10,20 +10,41 @@ app = Flask(__name__)
 GDRIVE_CLASS_MODEL_ID = "1qF1kB9dNIW-QWmr5td27OoQ2rQYpw0JK"
 GDRIVE_REG_MODEL_ID = "1pqXWkgx38oannunWu8ka5t5jZxJysiaI"
 
-# === Download Function ===
+# === Google Drive Download Handler ===
 def download_from_google_drive(file_id, dest_path):
-    if not os.path.exists(dest_path):
-        print(f"Downloading {dest_path} from Google Drive...")
-        url = f"https://drive.google.com/uc?export=download&id={file_id}"
-        response = requests.get(url)
-        if response.status_code == 200:
-            with open(dest_path, 'wb') as f:
-                f.write(response.content)
-            print(f"✅ {dest_path} downloaded successfully.")
-        else:
-            print(f"❌ Failed to download {dest_path} (Status code: {response.status_code})")
+    if os.path.exists(dest_path):
+        print(f"✅ {dest_path} already exists, skipping download.")
+        return
 
-# === Download Models if Missing ===
+    print(f"📥 Downloading {dest_path} from Google Drive...")
+
+    URL = "https://docs.google.com/uc?export=download"
+    session = requests.Session()
+
+    response = session.get(URL, params={'id': file_id}, stream=True)
+    token = get_confirm_token(response)
+
+    if token:
+        params = {'id': file_id, 'confirm': token}
+        response = session.get(URL, params=params, stream=True)
+
+    save_response_content(response, dest_path)
+    print(f"✅ {dest_path} downloaded successfully. Size: {os.path.getsize(dest_path)} bytes")
+
+def get_confirm_token(response):
+    for key, value in response.cookies.items():
+        if key.startswith('download_warning'):
+            return value
+    return None
+
+def save_response_content(response, destination):
+    CHUNK_SIZE = 32768
+    with open(destination, "wb") as f:
+        for chunk in response.iter_content(CHUNK_SIZE):
+            if chunk:
+                f.write(chunk)
+
+# === Download Models ===
 download_from_google_drive(GDRIVE_CLASS_MODEL_ID, "model_clas.pkl")
 download_from_google_drive(GDRIVE_REG_MODEL_ID, "model_reg.pkl")
 
@@ -60,21 +81,18 @@ def ping():
 def predict_clas():
     data = request.json
 
-    # Validate input
     if isinstance(data, dict):
         df = pd.DataFrame([data])
     elif isinstance(data, list):
         df = pd.DataFrame(data)
     else:
-        return jsonify({"error": "Invalid input format"}), 400
+        return jsonify({"error": "Invalid input format. Send a JSON object or list."}), 400
 
-    # Filter features
     try:
         df = df[FEATURES_CLAS]
     except KeyError as e:
         return jsonify({"error": f"Missing feature(s): {str(e)}"}), 400
 
-    # Make prediction
     pred = model_clas.predict(df)
     return jsonify({"prediction": pred.tolist()}), 200
 
@@ -87,7 +105,7 @@ def predict_reg():
     elif isinstance(data, list):
         df = pd.DataFrame(data)
     else:
-        return jsonify({"error": "Invalid input format"}), 400
+        return jsonify({"error": "Invalid input format. Send a JSON object or list."}), 400
 
     try:
         df = df[FEATURES_REG]
@@ -97,6 +115,6 @@ def predict_reg():
     pred = model_reg.predict(df)
     return jsonify({"prediction": pred.tolist()}), 200
 
-# === Run Server (for local testing) ===
+# === Run Server Locally ===
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
