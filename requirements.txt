@@ -1,17 +1,6 @@
-<<<<<<< HEAD
 flask
 pandas
 scikit-learn
 requests
 gunicorn
-=======
-flask
-requests
-pickle
-pandas
-jsonify
-numpy
-sklearn
-RandomForestClassifier
-RandomForestRegressor
->>>>>>> 2366e3474180633283b421d0fb9060ed5bd44c08
+
